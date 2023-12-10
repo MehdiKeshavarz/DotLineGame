@@ -6,19 +6,52 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
+import android.view.MotionEvent;
 import android.view.View;
 
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+
 public class GameView extends View {
 
-    private static class Point{
+    private static class Position {
         public int x;
         public int y;
 
-        Point(int x , int y){
+        Position(int x , int y){
             this.x = x;
             this.y = y;
+        }
+    }
+
+    private static class Diff {
+        public int i;
+        public int j;
+        public Float diff;
+
+        Diff(int i , int j,float diff){
+            this.i = i;
+            this.j = j;
+            this.diff = diff;
+        }
+    }
+
+    private static class Line {
+        public int i1;
+        public int j1;
+        public int i2;
+        public int j2;
+        public int playerIndex;
+
+        Line(int i1 , int j1, int i2 ,int j2,int playerIndex){
+            this.i1 = i1;
+            this.j1 = j1;
+            this.i2 = i2;
+            this.j2 = j2;
+            this.playerIndex = playerIndex;
         }
     }
 
@@ -26,6 +59,7 @@ public class GameView extends View {
     private Paint dotPaint;
     private Paint textPaint;
     private Paint linePaint;
+    private Paint touchPaint;
 
     private int cols = 4;
     private int rows = 4;
@@ -33,6 +67,14 @@ public class GameView extends View {
     private int offsetX;
     private int space = 150;
     private int radius = 15;
+
+    private float touchX;
+    private float touchY;
+
+    private boolean isDebugMode = false;
+    private boolean isSide1 = true;
+
+    private ArrayList<Line> lines = new ArrayList<>();
 
     public GameView(Context context) {
         super(context);
@@ -54,6 +96,11 @@ public class GameView extends View {
         dotPaint.setColor(Color.WHITE);
         dotPaint.setStyle(Paint.Style.FILL);
         dotPaint.setAntiAlias(true);
+
+        touchPaint = new Paint();
+        touchPaint.setColor(Color.RED);
+        touchPaint.setStyle(Paint.Style.FILL);
+        touchPaint.setAntiAlias(true);
 
         linePaint = new Paint();
         linePaint.setColor(Color.parseColor("#4444ff"));
@@ -85,27 +132,77 @@ public class GameView extends View {
         super.onDraw(canvas);
         canvas.drawColor(Color.parseColor("#222222"));
 
-        connect(canvas,0, 2,1,2);
-        connect(canvas,2, 2,3,1);
+        for (Line line: lines){
+          connectLine(canvas,line);
+        }
+
         for (int i =0; i<cols; i++){
             for (int j=0; j<rows; j++){
-                Point point = computePoint(i, j);
+                Position point = computePoint(i, j);
                 canvas.drawCircle(point.x, point.y, radius, dotPaint);
             }
         }
-        debugNaming(canvas);
+        if(isDebugMode){
+            canvas.drawCircle(touchX,touchY,10,touchPaint);
+            debugNaming(canvas);
+        }
+
 
 
     }
 
-    private void connect(Canvas canvas, int i1, int j1,int i2, int j2){
-        float c =(float)Math.sqrt(Math.pow(i1 - i2,2) + Math.pow(j1 - j2,2));
-        if(c != 1){
-            return;
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        touchX = event.getX();
+        touchY = event.getY();
+
+        detectConnectingLine();
+        invalidate();
+
+
+        isSide1 = !isSide1;
+        return super.onTouchEvent(event);
+    }
+
+    public void detectConnectingLine(){
+        ArrayList<Diff> diffs = new ArrayList<>();
+        for (int i =0; i<cols; i++){
+            for (int j=0; j<rows; j++) {
+               Position position =  computePoint(i,j);
+               float diff = computeDiff(touchX,touchY,position.x,position.y);
+               diffs.add(new Diff(i , j , diff));
+            }
         }
 
-        Point p1 = computePoint(i1, 2);
-        Point p2 = computePoint(i2,j2);
+        Collections.sort(diffs, new Comparator<Diff>() {
+            @Override
+            public int compare(Diff o1, Diff o2) {
+             return  o1.diff.compareTo(o2.diff);
+            }
+        });
+
+       Diff min1 = diffs.get(0);
+       Diff min2 = diffs.get(1);
+
+       if (min1.diff > space / 2){
+           return;
+       }
+       lines.add(new Line(min1.i, min1.j,min2.i, min2.j,isSide1 ? 1 : 2));
+    }
+
+    private float computeDiff(float x1,float y1, float x2, float y2){
+        return (float)Math.sqrt(Math.pow(x1 - x2,2) + Math.pow(y1 - y2,2));
+    }
+
+    private void connectLine(Canvas canvas,Line line){
+        Position p1 = computePoint(line.i1,line.j1);
+        Position p2 = computePoint(line.i2,line.j2);
+        if (line.playerIndex == 1){
+            linePaint.setColor(Color.parseColor("#4444ff"));
+        }else {
+            linePaint.setColor(Color.parseColor("#ff4444"));
+        }
+
         canvas.drawLine(p1.x, p1.y, p2.x,p2.y, linePaint);
     }
 
@@ -113,16 +210,16 @@ public class GameView extends View {
     private void debugNaming(Canvas canvas){
         for (int i =0; i<cols; i++){
             for (int j=0; j<rows; j++) {
-                Point point = computePoint(i, j);
+                Position point = computePoint(i, j);
                 String name = "" + i + "," +j;
                 canvas.drawText(name,point.x, point.y + 50,textPaint);
             }
         }
     }
-    private Point computePoint(int i , int j){
+    private Position computePoint(int i , int j){
         int x = offsetX +(i * space);
         int y = offsetY + ((rows -1 - j) * space);
 
-        return new Point(x, y);
+        return new Position(x, y);
     }
 }
