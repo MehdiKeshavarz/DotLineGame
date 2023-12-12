@@ -1,11 +1,13 @@
 package project;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -56,25 +58,42 @@ public class GameView extends View {
     }
 
 
+    private static class Home{
+        public int i;
+        public int j;
+        public int playerIndex;
+
+        Home(int i, int j){
+            this.i = i;
+            this.j = j;
+        }
+    }
+
+
     private Paint dotPaint;
     private Paint textPaint;
     private Paint linePaint;
     private Paint touchPaint;
+    private Paint homePaint;
 
-    private int cols = 4;
-    private int rows = 4;
+    private final String player1Color = "#4444ff";
+    private final String player2Color = "#ff4444";
+
+    private final int cols = 4;
+    private final int rows = 4;
     private int offsetY;
     private int offsetX;
-    private int space = 150;
-    private int radius = 15;
+    private final int space = 150;
+    private final int radius = 15;
 
     private float touchX;
     private float touchY;
 
-    private boolean isDebugMode = false;
+    private final boolean isDebugMode = false;
     private boolean isSide1 = true;
 
-    private ArrayList<Line> lines = new ArrayList<>();
+    private final ArrayList<Line> lines = new ArrayList<>();
+    private final ArrayList<Home> homes = new ArrayList<>();
 
     public GameView(Context context) {
         super(context);
@@ -96,6 +115,11 @@ public class GameView extends View {
         dotPaint.setColor(Color.WHITE);
         dotPaint.setStyle(Paint.Style.FILL);
         dotPaint.setAntiAlias(true);
+
+        homePaint = new Paint();
+        homePaint.setColor(Color.WHITE);
+        homePaint.setStyle(Paint.Style.FILL);
+        homePaint.setAntiAlias(true);
 
         touchPaint = new Paint();
         touchPaint.setColor(Color.RED);
@@ -136,6 +160,16 @@ public class GameView extends View {
           connectLine(canvas,line);
         }
 
+        for (Home home : homes){
+            if (home.playerIndex == 1){
+              homePaint.setColor(Color.parseColor(player1Color));
+            }else {
+                homePaint.setColor(Color.parseColor(player2Color));
+            }
+           Position homePosition =computePoint(home.i, home.j);
+          canvas.drawCircle(homePosition.x + space /2 ,homePosition.y - space /2,30,homePaint);
+        }
+
         for (int i =0; i<cols; i++){
             for (int j=0; j<rows; j++){
                 Position point = computePoint(i, j);
@@ -151,6 +185,7 @@ public class GameView extends View {
 
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         touchX = event.getX();
@@ -177,17 +212,97 @@ public class GameView extends View {
         Collections.sort(diffs, new Comparator<Diff>() {
             @Override
             public int compare(Diff o1, Diff o2) {
-             return  o1.diff.compareTo(o2.diff);
+               return o1.diff.compareTo(o2.diff);
             }
         });
 
        Diff min1 = diffs.get(0);
        Diff min2 = diffs.get(1);
 
-       if (min1.diff > space / 2){
-           return;
+       Diff firstPoint;
+       Diff secondPoint;
+
+        Home home1 = null;
+        Home home2 = null;
+       if (min1.i == min2.i){
+           //vertical
+           if (min1.j < min2.j){
+               firstPoint = min1;
+               secondPoint = min2;
+           }else {
+               firstPoint = min2;
+               secondPoint = min1;
+           }
+
+           home1 = new Home(firstPoint.i, firstPoint.j);
+           if (firstPoint.i> 0){
+               home2 = new Home(firstPoint.i - 1, firstPoint.j);
+           }
        }
-       lines.add(new Line(min1.i, min1.j,min2.i, min2.j,isSide1 ? 1 : 2));
+       else {
+           // horizontal
+           if (min1.i < min2.i){
+               firstPoint = min1;
+               secondPoint = min2;
+           }else {
+               firstPoint = min2;
+               secondPoint = min1;
+           }
+
+
+           home1 = new Home(firstPoint.i, firstPoint.j);
+           if (firstPoint.j> 0){
+               home2 = new Home(firstPoint.i, firstPoint.j -1);
+           }
+       }
+
+
+       if (firstPoint.diff > space / 2){
+           //return;
+       }
+       lines.add(new Line(firstPoint.i, firstPoint.j,secondPoint.i, secondPoint.j,isSide1 ? 1 : 2));
+
+
+        if (home1 != null){
+            checkHome(home1);
+        }
+
+        if (home2 != null){
+            checkHome(home2);
+        }
+
+    }
+
+    private void checkHome (Home home){
+        int i = home.i;
+        int j = home.j;
+        boolean leftConnected = false;
+        boolean rightConnected = false;
+        boolean topConnected = false;
+        boolean bottomConnected = false;
+
+        for (Line line : lines){
+          if (line.i1 == i && line.j1 == j && line.i2 == i && line.j2 == j+1){
+              leftConnected = true;
+          }
+          if (line.i1 == i+1 && line.j1 == j && line.i2 == i+1 && line.j2 == j+1){
+              rightConnected = true;
+          }
+          if (line.i1 == i && line.j1 == j+1 && line.i2 == i+1 && line.j2 == j+1){
+              topConnected = true;
+          }
+          if (line.i1 == i && line.j1 == j && line.i2 == i+1 && line.j2 == j){
+              bottomConnected = true;
+          }
+        }
+
+       boolean isFullConnected = leftConnected && rightConnected && topConnected && bottomConnected;
+
+       if (isFullConnected){
+           home.playerIndex = isSide1 ? 1 : 2;
+           homes.add(home);
+       }
+
     }
 
     private float computeDiff(float x1,float y1, float x2, float y2){
@@ -198,9 +313,9 @@ public class GameView extends View {
         Position p1 = computePoint(line.i1,line.j1);
         Position p2 = computePoint(line.i2,line.j2);
         if (line.playerIndex == 1){
-            linePaint.setColor(Color.parseColor("#4444ff"));
+            linePaint.setColor(Color.parseColor(player1Color));
         }else {
-            linePaint.setColor(Color.parseColor("#ff4444"));
+            linePaint.setColor(Color.parseColor(player2Color));
         }
 
         canvas.drawLine(p1.x, p1.y, p2.x,p2.y, linePaint);
