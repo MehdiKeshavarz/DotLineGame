@@ -79,18 +79,22 @@ public class GameView extends View {
     private final String player1Color = "#4444ff";
     private final String player2Color = "#ff4444";
 
-    private final int cols = 4;
-    private final int rows = 4;
+    private int player1Score = 0;
+    private int player2Score = 0;
+    private int cols = 4;
+    private int rows = 4;
     private int offsetY;
     private int offsetX;
-    private final int space = 150;
-    private final int radius = 15;
+    private int space = 150;
+    private int radius = 15;
 
     private float touchX;
     private float touchY;
 
-    private final boolean isDebugMode = false;
+    private boolean isDebugMode = false;
     private boolean isSide1 = true;
+    private boolean isGameOver = false;
+
 
     private final ArrayList<Line> lines = new ArrayList<>();
     private final ArrayList<Home> homes = new ArrayList<>();
@@ -110,7 +114,11 @@ public class GameView extends View {
         initialize();
     }
 
+
     private void initialize(){
+        if (isInEditMode()){
+            return;
+        }
         dotPaint = new Paint();
         dotPaint.setColor(Color.WHITE);
         dotPaint.setStyle(Paint.Style.FILL);
@@ -135,7 +143,7 @@ public class GameView extends View {
         textPaint = new Paint();
         textPaint.setColor(Color.WHITE);
         textPaint.setStyle(Paint.Style.FILL);
-        textPaint.setTextSize(30);
+        textPaint.setTextSize(40);
         textPaint.setTextAlign(Paint.Align.CENTER);
         textPaint.setAntiAlias(true);
 
@@ -151,8 +159,26 @@ public class GameView extends View {
         offsetY = (screenHeight - boxHeight) /2;
     }
 
+    public void rest(){
+
+        player1Score = 0;
+        player2Score = 0;
+
+        isDebugMode = false;
+        isSide1 = true;
+        isGameOver = false;
+
+        lines.clear();
+        homes.clear();
+        invalidate();
+    }
+
+
     @Override
     protected void onDraw(Canvas canvas) {
+        if (isInEditMode()){
+            return;
+        }
         super.onDraw(canvas);
         canvas.drawColor(Color.parseColor("#222222"));
 
@@ -176,26 +202,51 @@ public class GameView extends View {
                 canvas.drawCircle(point.x, point.y, radius, dotPaint);
             }
         }
+        int screenWidthHalf = G.context.getResources().getDisplayMetrics().widthPixels / 2;
+        int screenHeight = G.context.getResources().getDisplayMetrics().heightPixels;
+        homePaint.setColor(Color.parseColor(player1Color));
+        canvas.drawCircle(screenWidthHalf - 100 ,100,60,homePaint);
+        canvas.drawText("" +player1Score,screenWidthHalf - 100 ,110,textPaint);
+        canvas.drawText("player1" ,screenWidthHalf - 100 ,210,textPaint);
+        homePaint.setColor(Color.parseColor(player2Color));
+        canvas.drawCircle(screenWidthHalf + 100 ,100,60,homePaint);
+        canvas.drawText("" +player2Score,screenWidthHalf + 100 ,110,textPaint);
+        canvas.drawText("player2",screenWidthHalf + 100 ,210,textPaint);
+
         if(isDebugMode){
             canvas.drawCircle(touchX,touchY,10,touchPaint);
             debugNaming(canvas);
         }
 
+        if(homes.size() == (cols - 1) * (rows - 1)){
+            isGameOver = true;
 
-
+        }
+        if (isGameOver) {
+            String message = "";
+            if (player1Score == player2Score) {
+                message = "GAME DRAW";
+            } else if (player1Score > player2Score) {
+                message = "PLAYER 1 WON THE GAME";
+            } else {
+                message = "PLAYER 2 WON THE GAME";
+            }
+            canvas.drawText(message, screenWidthHalf, screenHeight - 350, textPaint);
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (isGameOver){
+            return true;
+        }
+
         touchX = event.getX();
         touchY = event.getY();
 
         detectConnectingLine();
         invalidate();
-
-
-        isSide1 = !isSide1;
         return super.onTouchEvent(event);
     }
 
@@ -260,20 +311,32 @@ public class GameView extends View {
        if (firstPoint.diff > space / 2){
            //return;
        }
+
+       for (Line line : lines){
+           if (line.i1 == firstPoint.i && line.j1 == firstPoint.j && line.i2 == secondPoint.i && line.j2 == secondPoint.j){
+               return;
+           }
+       }
        lines.add(new Line(firstPoint.i, firstPoint.j,secondPoint.i, secondPoint.j,isSide1 ? 1 : 2));
 
 
+        boolean wonHome1 = false;
+        boolean wonHome2 = false;
         if (home1 != null){
-            checkHome(home1);
+            wonHome1 = checkHome(home1);
         }
 
         if (home2 != null){
-            checkHome(home2);
+            wonHome2 =checkHome(home2);
+        }
+
+        if (!wonHome1 && !wonHome2){
+            isSide1 = !isSide1;
         }
 
     }
 
-    private void checkHome (Home home){
+    private boolean checkHome (Home home){
         int i = home.i;
         int j = home.j;
         boolean leftConnected = false;
@@ -301,8 +364,14 @@ public class GameView extends View {
        if (isFullConnected){
            home.playerIndex = isSide1 ? 1 : 2;
            homes.add(home);
+           if (home.playerIndex == 1){
+               player1Score++;
+           }else {
+               player2Score++;
+           }
+           return true;
        }
-
+        return false;
     }
 
     private float computeDiff(float x1,float y1, float x2, float y2){
