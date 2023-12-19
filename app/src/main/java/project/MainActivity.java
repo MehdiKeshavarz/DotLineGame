@@ -8,6 +8,7 @@ import android.widget.Button;
 
 import com.keshavarz.mehdi.dotline.R;
 
+
 public class MainActivity extends AppCompatActivity {
 
     @Override
@@ -21,7 +22,7 @@ public class MainActivity extends AppCompatActivity {
        btnRestGame.setOnClickListener(new View.OnClickListener() {
            @Override
            public void onClick(View view) {
-               gameView.rest();
+               gameView.restGame();
            }
        });
     }
