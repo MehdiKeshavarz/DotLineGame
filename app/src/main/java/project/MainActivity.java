@@ -25,5 +25,7 @@ public class MainActivity extends AppCompatActivity {
                gameView.restGame();
            }
        });
+
+       gameView.restGame();
     }
 }
