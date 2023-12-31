@@ -41,6 +41,10 @@ public class GameView extends View {
     private static final int EDGE_TOP= 2;
     private static final int EDGE_BOTTOM = 3;
 
+
+
+    private  static ArrayList<Move> availableMoves = new ArrayList<>();
+
     private static class Theme {
         private static final int[] playerColors = new int[]{
                 Color.parseColor("#4444ff"),
@@ -62,8 +66,8 @@ public class GameView extends View {
         private static final int TYPE_CPU = 0;
         private static final int TYPE_PLAYER = 1;
 
-        private static final int cols = 4;
-        private static final int rows = 4;
+        private static final int cols = 5;
+        private static final int rows = 5;
 
 
         private static final String[] playerNames = new String[]{"player1 ", "player2"};
@@ -122,6 +126,19 @@ public class GameView extends View {
             this.i2 = i2;
             this.j2 = j2;
             this.playerIndex = playerIndex;
+        }
+    }
+
+    private static class Move {
+        public int i1;
+        public int j1;
+        public int i2;
+        public int j2;
+        Move(int i1, int j1, int i2, int j2) {
+            this.i1 = i1;
+            this.j1 = j1;
+            this.i2 = i2;
+            this.j2 = j2;
         }
     }
 
@@ -216,12 +233,33 @@ public class GameView extends View {
 
         State.lines.clear();
         State.boxes.clear();
-        refresh();
+
+
+
+        populateMoves();
 
         if(isCupTurn()){
             playNext();
         }
+
+        refresh();
     }
+
+
+    private void populateMoves(){
+        availableMoves.clear();
+        for (int i = 0 ; i< Options.cols - 1; i++){
+            for (int j = 0 ; j < Options.rows; j++){
+                availableMoves.add(new Move(i,j,i + 1,j));
+            }
+        }
+        for (int i = 0 ; i< Options.cols; i++){
+            for (int j = 0 ; j < Options.rows -1 ; j++){
+                availableMoves.add(new Move(i,j,i,j + 1));
+            }
+        }
+    }
+
 
     private void refresh() {
         if (isGameFinished()) {
@@ -476,6 +514,14 @@ public class GameView extends View {
         Line line = new Line(firstPoint.i, firstPoint.j, secondPoint.i, secondPoint.j, getPlayerIndex());
         State.lines.add(line);
 
+        for(int index = availableMoves.size() - 1; index >= 0; index--){
+            Move move = availableMoves.get(index);
+            if (move.i1 == line.i1 && move.i2 == line.i2 && move.j1 == line.j1 && move.j2 == line.j2){
+                availableMoves.remove(move);
+                break;
+            }
+        }
+
 
         // check if player get award
         boolean wonBox1 = checkBox(box1);
@@ -525,25 +571,9 @@ public class GameView extends View {
             return;
         }
         while (true) {
-            int i = getRandom(0 , Options.cols -2);
-            int j = getRandom(0 , Options.rows -2);
-
-            int side = getRandom(0 , 3);
-            boolean connected = false;
-            switch (side){
-                case EDGE_LEFT:
-                    connected = connectLeft(i, j);
-                    break;
-                case EDGE_RIGHT:
-                    connected = connectRight(i, j);
-                    break;
-                case EDGE_TOP:
-                    connected = connectTop(i, j);
-                    break;
-                case EDGE_BOTTOM:
-                    connected = connectBottom(i, j);
-                    break;
-            }
+            int moveIndex = getRandom(0 , availableMoves.size() - 1);
+            Move move = availableMoves.get(moveIndex);
+            boolean connected =  drawLine(new Point(move.i1, move.j1), new Point(move.i2,move.j2));
             if (connected) {
                 break;
             }

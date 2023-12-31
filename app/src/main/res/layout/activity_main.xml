@@ -8,7 +8,8 @@
         android:id="@+id/btn_rest"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Rest Game" />
+        android:text="Rest Game"
+        android:background="#222222"/>
 
     <project.GameView
         android:id="@+id/game_view"
