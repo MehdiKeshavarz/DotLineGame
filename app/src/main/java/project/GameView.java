@@ -7,6 +7,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -38,12 +39,11 @@ public class GameView extends View {
 
     private static final int EDGE_LEFT = 0;
     private static final int EDGE_RIGHT = 1;
-    private static final int EDGE_TOP= 2;
+    private static final int EDGE_TOP = 2;
     private static final int EDGE_BOTTOM = 3;
 
 
-
-    private  static ArrayList<Move> availableMoves = new ArrayList<>();
+    private static final ArrayList<Move> availableMoves = new ArrayList<>();
 
     private static class Theme {
         private static final int[] playerColors = new int[]{
@@ -71,7 +71,7 @@ public class GameView extends View {
 
 
         private static final String[] playerNames = new String[]{"player1 ", "player2"};
-        private static final int[] playerType = new int[]{TYPE_CPU, TYPE_CPU};
+        private static final int[] playerType = new int[]{TYPE_PLAYER, TYPE_CPU};
         //private static final int[] playerType = new int[]{TYPE_PLAYER,TYPE_PLAYER};
 
     }
@@ -134,6 +134,7 @@ public class GameView extends View {
         public int j1;
         public int i2;
         public int j2;
+
         Move(int i1, int j1, int i2, int j2) {
             this.i1 = i1;
             this.j1 = j1;
@@ -235,10 +236,9 @@ public class GameView extends View {
         State.boxes.clear();
 
 
-
         populateMoves();
 
-        if(isCupTurn()){
+        if (isCupTurn()) {
             playNext();
         }
 
@@ -246,16 +246,16 @@ public class GameView extends View {
     }
 
 
-    private void populateMoves(){
+    private void populateMoves() {
         availableMoves.clear();
-        for (int i = 0 ; i< Options.cols - 1; i++){
-            for (int j = 0 ; j < Options.rows; j++){
-                availableMoves.add(new Move(i,j,i + 1,j));
+        for (int i = 0; i < Options.cols - 1; i++) {
+            for (int j = 0; j < Options.rows; j++) {
+                availableMoves.add(new Move(i, j, i + 1, j));
             }
         }
-        for (int i = 0 ; i< Options.cols; i++){
-            for (int j = 0 ; j < Options.rows -1 ; j++){
-                availableMoves.add(new Move(i,j,i,j + 1));
+        for (int i = 0; i < Options.cols; i++) {
+            for (int j = 0; j < Options.rows - 1; j++) {
+                availableMoves.add(new Move(i, j, i, j + 1));
             }
         }
     }
@@ -268,7 +268,7 @@ public class GameView extends View {
         invalidate();
     }
 
-    private boolean isGameFinished(){
+    private boolean isGameFinished() {
         return State.boxes.size() == (Options.cols - 1) * (Options.rows - 1);
     }
 
@@ -296,7 +296,7 @@ public class GameView extends View {
         return Options.playerType[playerIndex - 1];
     }
 
-    private boolean isCupTurn(){
+    private boolean isCupTurn() {
         return getPlayerType(getPlayerIndex()) == Options.TYPE_CPU;
     }
 
@@ -364,12 +364,12 @@ public class GameView extends View {
     }
 
     private void drawPlayerScore(Canvas canvas, int playerIndex, int x, int y) {
-        if (playerIndex == getPlayerIndex()){
+        if (playerIndex == getPlayerIndex()) {
             paintBox.setColor(Color.WHITE);
-            canvas.drawCircle(x, y ,65, paintBox);
-        }else {
+            canvas.drawCircle(x, y, 65, paintBox);
+        } else {
             paintBox.setColor(Color.parseColor("#444444"));
-            canvas.drawCircle(x, y ,65, paintBox);
+            canvas.drawCircle(x, y, 65, paintBox);
         }
 
         paintBox.setColor(getPlayerColor(playerIndex));
@@ -429,7 +429,7 @@ public class GameView extends View {
             return true;
         }
 
-        if (isCupTurn()){
+        if (isCupTurn()) {
             return true;
         }
 
@@ -514,9 +514,9 @@ public class GameView extends View {
         Line line = new Line(firstPoint.i, firstPoint.j, secondPoint.i, secondPoint.j, getPlayerIndex());
         State.lines.add(line);
 
-        for(int index = availableMoves.size() - 1; index >= 0; index--){
+        for (int index = availableMoves.size() - 1; index >= 0; index--) {
             Move move = availableMoves.get(index);
-            if (move.i1 == line.i1 && move.i2 == line.i2 && move.j1 == line.j1 && move.j2 == line.j2){
+            if (move.i1 == line.i1 && move.i2 == line.i2 && move.j1 == line.j1 && move.j2 == line.j2) {
                 availableMoves.remove(move);
                 break;
             }
@@ -557,43 +557,198 @@ public class GameView extends View {
                     ai();
                     refresh();
                 }
-            },500);
+            }, 500);
         }
 
     }
 
-    private int getRandom(int min , int max){
+    private int getRandom(int min, int max) {
         return (int) Math.floor(Math.random() * (max - min + 1)) + min;
     }
 
     private void ai() {
-        if (isGameFinished()){
+        if (isGameFinished()) {
             return;
         }
-        while (true) {
-            int moveIndex = getRandom(0 , availableMoves.size() - 1);
-            Move move = availableMoves.get(moveIndex);
-            boolean connected =  drawLine(new Point(move.i1, move.j1), new Point(move.i2,move.j2));
-            if (connected) {
-                break;
+
+        if(fill3SidesBoxes()){
+            return;
+        }
+
+        ArrayList<Move> unsafeMoves = detectUnsafeMoves();
+
+        if(makeRandomSafeMove(unsafeMoves)){
+            return;
+        }
+
+        makeRandomMove();
+
+
+
+    }
+
+    private ArrayList<Move> detectUnsafeMoves(){
+      ArrayList<Move> unsafeMoves = new ArrayList<>();
+
+
+        for (int i = 0; i <= Options.cols - 2; i++) {
+            for (int j = 0; j <= Options.rows - 2; j++) {
+                ArrayList<Integer> freeSides = new ArrayList<>();
+                if (hasBottom(i, j)) {
+                    freeSides.add(EDGE_BOTTOM);
+                }
+                if (hasRight(i, j)) {
+                    freeSides.add(EDGE_RIGHT);
+                }
+                if (hasLeft(i, j)) {
+                    freeSides.add(EDGE_LEFT);
+                }
+                if (hasTop(i, j)) {
+                    freeSides.add(EDGE_TOP);
+                }
+
+                if (freeSides.size() == 2) {
+                    if (freeSides.contains(EDGE_LEFT) && freeSides.contains(EDGE_RIGHT)) {
+                        //top, bottom
+                        unsafeMoves.add(new Move(i, j + 1, i + 1, j + 1));
+                        unsafeMoves.add(new Move(i, j, i + 1, j));
+                    }
+
+                    if (freeSides.contains(EDGE_LEFT) && freeSides.contains(EDGE_TOP)) {
+                        //right, bottom
+                        unsafeMoves.add(new Move(i + 1, j, i + 1, j + 1));
+                        unsafeMoves.add(new Move(i, j, i + 1, j));
+                    }
+
+                    if (freeSides.contains(EDGE_LEFT) && freeSides.contains(EDGE_BOTTOM)) {
+                        //right, top
+                        unsafeMoves.add(new Move(i + 1, j, i + 1, j + 1));
+                        unsafeMoves.add(new Move(i, j + 1, i + 1, j + 1));
+                    }
+
+                    if (freeSides.contains(EDGE_RIGHT) && freeSides.contains(EDGE_TOP)) {
+                        //left, bottom.
+                        unsafeMoves.add(new Move(i, j, i, j + 1));
+                        unsafeMoves.add(new Move(i, j, i + 1, j));
+                    }
+
+                    if (freeSides.contains(EDGE_RIGHT) && freeSides.contains(EDGE_BOTTOM)) {
+                        //left, top
+                        unsafeMoves.add(new Move(i, j, i, j + 1));
+                        unsafeMoves.add(new Move(i, j + 1, i + 1, j + 1));
+                    }
+
+                    if (freeSides.contains(EDGE_TOP) && freeSides.contains(EDGE_BOTTOM)) {
+                        //left, right
+                        unsafeMoves.add(new Move(i, j, i, j + 1));
+                        unsafeMoves.add(new Move(i + 1, j, i + 1, j + 1));
+                    }
+                }
             }
         }
+
+
+      return unsafeMoves;
     }
 
-    private boolean connectLeft(int i, int j) {
-        return drawLine(new Point(i, j), new Point(i, j + 1));
+    private void makeRandomMove(){
+        int moveIndex = getRandom(0 , availableMoves.size() - 1);
+        Move move = availableMoves.get(moveIndex);
+        drawLine(new Point(move.i1, move.j1), new Point(move.i2,move.j2));
     }
 
-    private boolean connectRight(int i, int j) {
-        return drawLine(new Point(i + 1, j), new Point(i + 1, j + 1));
+    private boolean makeRandomSafeMove(ArrayList<Move> unsafeMoves){
+        ArrayList<Move> safeMoves = new ArrayList<>();
+
+        for (Move move: availableMoves){
+            boolean isSafeMove = true;
+            for (Move testMove: unsafeMoves){
+                if (testMove.i1 == move.i1 && testMove.i2 == move.i2 && testMove.j1 == move.j1 && testMove.j2 == move.j2){
+                    isSafeMove = false;
+                    break;
+                }
+            }
+            if(isSafeMove){
+                safeMoves.add(move);
+            }
+        }
+        if(safeMoves.size() == 0 ){
+            return  false;
+        }
+
+        int moveIndex = getRandom(0, safeMoves.size() - 1);
+        Move move = safeMoves.get(moveIndex);
+
+        drawLine(new Point(move.i1, move.j1), new Point(move.i2, move.j2));
+        return true;
+
+
     }
 
-    private boolean connectTop(int i, int j) {
-        return drawLine(new Point(i, j + 1), new Point(i + 1, j + 1));
+    private boolean fill3SidesBoxes(){
+        for (int i = 0; i <= Options.cols - 2; i++) {
+            for (int j = 0; j <= Options.rows - 2; j++) {
+                int sides = 0;
+                int freeSide = -1;
+                if (hasBottom(i, j)) {
+                    sides++;
+                } else {
+                    freeSide = EDGE_BOTTOM;
+                }
+                if (hasRight(i, j)) {
+                    sides++;
+                } else {
+                    freeSide = EDGE_RIGHT;
+                }
+                if (hasLeft(i, j)) {
+                    sides++;
+                } else {
+                    freeSide = EDGE_LEFT;
+                }
+                if (hasTop(i, j)) {
+                    sides++;
+                } else {
+                    freeSide = EDGE_TOP;
+                }
+
+                if (sides == 3) {
+                    Log.i("LOG","Found Sided = 3");
+                    switch (freeSide) {
+                        case EDGE_BOTTOM:
+                            connectBottom(i, j);
+                            return true;
+                        case EDGE_RIGHT:
+                            connectRight(i, j);
+                            return true;
+                        case EDGE_LEFT:
+                            connectLeft(i, j);
+                            return true;
+                        case EDGE_TOP:
+                            connectTop(i, j);
+                            return true;
+                    }
+                }
+
+            }
+        }
+
+        return false;
     }
 
-    private boolean connectBottom(int i, int j) {
-        return drawLine(new Point(i, j), new Point(i + 1, j));
+    private void connectLeft(int i, int j) {
+        drawLine(new Point(i, j), new Point(i, j + 1));
+    }
+
+    private void connectRight(int i, int j) {
+         drawLine(new Point(i + 1, j), new Point(i + 1, j + 1));
+    }
+
+    private void connectTop(int i, int j) {
+         drawLine(new Point(i, j + 1), new Point(i + 1, j + 1));
+    }
+
+    private void connectBottom(int i, int j) {
+         drawLine(new Point(i, j), new Point(i + 1, j));
     }
 
     private boolean hasLeft(int i, int j) {
