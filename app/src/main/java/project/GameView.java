@@ -22,8 +22,6 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -36,6 +34,8 @@ public class GameView extends View {
 
     private Paint paintDot;
     private Paint paintText;
+    private Paint scoreBorderPaint;
+    private Paint scoreEffectPaint;
     private Paint paintLine;
     private Paint paintTouch;
     private Paint paintBox;
@@ -59,6 +59,11 @@ public class GameView extends View {
 
 
     private static final ArrayList<Move> availableMoves = new ArrayList<>();
+
+    private static final float[] playerIndexEffectRadius = new float[]{50,25};
+    private static boolean isRenderingLock = false;
+
+    private static float lastLineAlpha = 0;
 
     private static class Theme {
         private static final int[] playerColors = new int[]{
@@ -84,10 +89,10 @@ public class GameView extends View {
         private static int cols = 4;
         private static int rows = 4;
 
-
         private static final String[] playerNames = new String[]{"player1 ", "player2"};
-        //private static final int[] playerType = new int[]{TYPE_PLAYER, TYPE_CPU};
-        private static final int[] playerType = new int[]{TYPE_PLAYER, TYPE_PLAYER};
+        private static final int[] playerTypes = new int[]{TYPE_CPU, TYPE_PLAYER};
+
+        private static boolean highGraphic = true;
 
     }
 
@@ -190,6 +195,12 @@ public class GameView extends View {
         if (isInEditMode()) {
             return;
         }
+
+        if(Options.highGraphic){
+            mainLoop();
+        }
+
+
         initializePaints();
         initializeMetrics();
     }
@@ -204,6 +215,20 @@ public class GameView extends View {
         paintBox.setColor(Color.WHITE);
         paintBox.setStyle(Paint.Style.FILL);
         paintBox.setAntiAlias(true);
+
+
+        scoreBorderPaint = new Paint();
+        scoreBorderPaint.setColor(Color.WHITE);
+        scoreBorderPaint.setStyle(Paint.Style.STROKE);
+        scoreBorderPaint.setStrokeWidth(10);
+        scoreBorderPaint.setAntiAlias(true);
+
+
+        scoreEffectPaint = new Paint();
+        scoreEffectPaint.setColor(Color.WHITE);
+        scoreEffectPaint.setStyle(Paint.Style.STROKE);
+        scoreEffectPaint.setStrokeWidth(5);
+        scoreEffectPaint.setAntiAlias(true);
 
         paintTouch = new Paint();
         paintTouch.setColor(Color.RED);
@@ -242,7 +267,6 @@ public class GameView extends View {
         State.playerScores[0] = 0;
         State.playerScores[1] = 0;
 
-
         Debug.isDebugMode = false;
         State.isSide1 = true;
         State.isGameOver = false;
@@ -250,14 +274,66 @@ public class GameView extends View {
         State.actions.clear();
         State.boxes.clear();
 
-
         populateMoves();
 
-        if (isCupTurn()) {
+        if (isCpuTurn()) {
             playNext();
         }
-
         refresh();
+    }
+
+
+    private void mainLoop() {
+        Thread main = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                long physicLastTime = System.currentTimeMillis();
+                long renderLastTime = System.currentTimeMillis();
+
+                while (true) {
+                    long physicElapsedTime = System.currentTimeMillis() - physicLastTime;
+                    if (physicElapsedTime > 20){
+                        updatePhysic(physicElapsedTime);
+                        physicLastTime = System.currentTimeMillis();
+                    }
+                    long renderElapsedTime = System.currentTimeMillis() - renderLastTime;
+                    if (renderElapsedTime > 15){
+                        renderGame();
+                        renderLastTime = System.currentTimeMillis();
+                    }
+
+                    try {
+                        Thread.sleep(5);
+
+                    }catch (InterruptedException e){
+                        e.printStackTrace();;
+                    }
+                }
+            }
+        });
+
+        main.start();
+
+    }
+
+    private void updatePhysic(long elapsedTime) {
+        for (int i=0; i< playerIndexEffectRadius.length;i++){
+            playerIndexEffectRadius[i] += (elapsedTime * 0.1f);
+            if(playerIndexEffectRadius[i] > 90){
+                playerIndexEffectRadius[i] = 50;
+            }
+
+        }
+        lastLineAlpha += elapsedTime * 0.004f;
+        if (lastLineAlpha >= 1){
+            isRenderingLock = false;
+            lastLineAlpha = 0;
+        }
+
+    }
+
+    private void renderGame() {
+        postInvalidate();
     }
 
     private void addToAvailableMoves(int i1, int j1, int i2, int j2) {
@@ -381,7 +457,7 @@ public class GameView extends View {
             Options.cols = options.getInt("cols");
             Options.rows = options.getInt("rows");
             int opponentType = options.getInt("opponentType");
-            Options.playerType[1] = opponentType;
+            Options.playerTypes[1] = opponentType;
 
 
             restGame();
@@ -437,10 +513,10 @@ public class GameView extends View {
     }
 
     private int getPlayerType(int playerIndex) {
-        return Options.playerType[playerIndex - 1];
+        return Options.playerTypes[playerIndex - 1];
     }
 
-    private boolean isCupTurn() {
+    private boolean isCpuTurn() {
         return getPlayerType(getPlayerIndex()) == Options.TYPE_CPU;
     }
 
@@ -473,14 +549,48 @@ public class GameView extends View {
         return new Position(x, y);
     }
 
-    private void drawBackground(Canvas canvas) {
-        canvas.drawColor(Theme.backgroundColor);
+    private void drawBackground(Canvas canvas){
+    canvas.drawColor(Theme.backgroundColor);
     }
 
     private void drawConnectedLines(Canvas canvas) {
-        for (Action line : State.actions) {
-            drawLine(canvas, line);
+        if (Options.highGraphic && isRenderingLock){
+            for (int i = 0; i< State.actions.size() -1 ; i++){
+                Action action = State.actions.get(i);
+                drawLine(canvas , action);
+            }
+            drawAnimateLastAction(canvas);
+        }else{
+            for (Action line : State.actions) {
+                drawLine(canvas, line);
+            }
         }
+
+
+    }
+
+    private void drawAnimateLastAction(Canvas canvas) {
+        Action lastAction = State.actions.get(State.actions.size() - 1);
+        Position p1 = getPointPosition(lastAction.i1, lastAction.j1);
+        Position p2 = getPointPosition(lastAction.i2, lastAction.j2);
+        paintLine.setColor(getPlayerColor(lastAction.playerIndex));
+        if (p1.x == p2.x){
+            //vertical
+            canvas.drawLine(p1.x, p1.y, p2.x, p1.y - Theme.space * lastLineAlpha, paintLine);
+        }else {
+            //horizontal
+            canvas.drawLine(p1.x, p1.y, p1.x + Theme.space * lastLineAlpha, p2.y, paintLine);
+        }
+
+    }
+
+    private void drawPlayerIndexEffect(Canvas canvas,int x , int y) {
+        for (int i=0; i< playerIndexEffectRadius.length; i++){
+            float alpha = 2.5f * (100 - playerIndexEffectRadius[i] - 10);
+            scoreEffectPaint.setAlpha((int) alpha);
+            canvas.drawCircle(x,y, playerIndexEffectRadius[i], scoreEffectPaint);
+        }
+
     }
 
     private void drawLine(Canvas canvas, Action line) {
@@ -508,19 +618,23 @@ public class GameView extends View {
     }
 
     private void drawPlayerScore(Canvas canvas, int playerIndex, int x, int y) {
-        if (playerIndex == getPlayerIndex()) {
-            paintBox.setColor(Color.WHITE);
-            canvas.drawCircle(x, y, 65, paintBox);
-        } else {
-            paintBox.setColor(Color.parseColor("#444444"));
-            canvas.drawCircle(x, y, 65, paintBox);
-        }
-
         paintBox.setColor(getPlayerColor(playerIndex));
         canvas.drawCircle(x, y, 55, paintBox);
         canvas.drawText("" + getPlayerScore(playerIndex), x, y + 10, paintText);
         canvas.drawText(getPlayerName(playerIndex), x, y + 110, paintText);
 
+        if (playerIndex == getPlayerIndex()) {
+            if (Options.highGraphic) {
+                drawPlayerIndexEffect(canvas, x ,y);
+
+            } else {
+                scoreBorderPaint.setColor(Color.WHITE);
+                canvas.drawCircle(x, y, 65, scoreBorderPaint);
+            }
+        } else {
+            scoreBorderPaint.setColor(Color.parseColor("#444444"));
+            canvas.drawCircle(x, y, 65, scoreBorderPaint);
+        }
     }
 
     private void drawScores(Canvas canvas) {
@@ -573,7 +687,11 @@ public class GameView extends View {
             return true;
         }
 
-        if (isCupTurn()) {
+        if (isCpuTurn()) {
+            return true;
+        }
+
+        if (isRenderingLock){
             return true;
         }
 
@@ -585,8 +703,8 @@ public class GameView extends View {
         Diff diff1 = diffs.get(0);
         Diff diff2 = diffs.get(1);
 
-        drawLine(diff1.point, diff2.point);
-        refresh();
+      drawLine(diff1.point, diff2.point);
+      refresh();
 
         return super.onTouchEvent(event);
     }
@@ -618,8 +736,9 @@ public class GameView extends View {
 
         Box box1;
         Box box2 = null;
+
         if (point1.i == point2.i) {
-            //vertical
+            // vertical
             if (point1.j < point2.j) {
                 firstPoint = point1;
                 secondPoint = point2;
@@ -629,6 +748,7 @@ public class GameView extends View {
             }
 
             box1 = new Box(firstPoint.i, firstPoint.j);
+
             if (firstPoint.i > 0) {
                 box2 = new Box(firstPoint.i - 1, firstPoint.j);
             }
@@ -642,21 +762,28 @@ public class GameView extends View {
                 secondPoint = point1;
             }
 
-
             box1 = new Box(firstPoint.i, firstPoint.j);
+
             if (firstPoint.j > 0) {
                 box2 = new Box(firstPoint.i, firstPoint.j - 1);
             }
         }
+
         // if this line is already connected
         for (Action line : State.actions) {
             if (line.i1 == firstPoint.i && line.j1 == firstPoint.j && line.i2 == secondPoint.i && line.j2 == secondPoint.j) {
                 return false;
             }
         }
-        // add line to list of connected lines
+
+        // add line to list of connected actions
         Action line = new Action(firstPoint.i, firstPoint.j, secondPoint.i, secondPoint.j, getPlayerIndex());
         State.actions.add(line);
+
+        if (Options.highGraphic){
+            isRenderingLock = true;
+            lastLineAlpha = 0;
+        }
 
         for (int index = availableMoves.size() - 1; index >= 0; index--) {
             Move move = availableMoves.get(index);
@@ -665,7 +792,6 @@ public class GameView extends View {
                 break;
             }
         }
-
 
         // check if player get award
         boolean wonBox1 = checkBox(box1);
@@ -694,16 +820,15 @@ public class GameView extends View {
     }
 
     private void playNext() {
-        if (isCupTurn()) {
+        if (isCpuTurn()) {
             G.handler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
                     ai();
                     refresh();
                 }
-            }, 500);
+            }, 100);
         }
-
     }
 
     private int getRandom(int min, int max) {
